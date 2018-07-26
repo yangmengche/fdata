@@ -30,7 +30,7 @@ def preProcess(ict, fct, label):
   # [X_training_fct, X_testing_fct] = np.split(fct, [TRAINING_SIZE], axis=0)
   # [y_training, y_testing] = np.split(label, [TRAINING_SIZE], axis=0)
 
-  # standardlization
+  # standardization
   ict_mean = ict.mean(axis=0)
   ict -= ict_mean
   ict_std = ict.std(axis=0, dtype='float64')
@@ -61,12 +61,13 @@ def predict_result(output, label):
   return correct / TESTING_SIZE
 
 def dnn():
+  print('\n*** DNN ***\n')
   X_training = np.concatenate((X_training_ict, X_training_fct), axis=1)
   X_testing = np.concatenate((X_testing_ict, X_testing_fct), axis=1)
   model=Sequential()
-  model.add(Dense(100, activation='relu', input_shape=(ICT_SIZE+FCT_SIZE,), kernel_regularizer=regularizers.l2(0.0), activity_regularizer=regularizers.l2(0.0)))
-  # model.add(Dense(16, activation='relu'))
-  model.add(Dense(25, activation='relu'))
+  model.add(Dense(32, activation='relu', input_shape=(ICT_SIZE+FCT_SIZE,), kernel_regularizer=regularizers.l2(0.01), activity_regularizer=regularizers.l2(0.01)))
+  # model.add(Dense(8, activation='relu'))
+  # model.add(Dense(25, activation='relu'))
   model.add(Dense(1))
   model.compile(optimizer='rmsprop', loss='mse', metrics=['accuracy'])
   model.summary()
@@ -89,6 +90,7 @@ def dnn():
   return model, history
 
 def dnn_part():
+  print('\n*** DNN Part***\n')
   model=Sequential()
   model.add(Dense(64, activation='relu', input_shape=(FCT_SIZE,), kernel_regularizer=regularizers.l2(0.01), activity_regularizer=regularizers.l2(0.01)))
   # model.add(Dense(64, activation='relu'))
@@ -100,6 +102,7 @@ def dnn_part():
   return model, history
 
 def simple_rnn():
+  print('\n*** Simple RNN ***\n')
   pad = np.zeros((TRAINING_SIZE, FCT_SIZE - ICT_SIZE))
   temp = np.concatenate((X_training_ict, pad), axis=1)
   X_training = np.concatenate((temp, X_training_fct), axis=1)
@@ -107,11 +110,11 @@ def simple_rnn():
 
   pad = np.zeros((TESTING_SIZE, FCT_SIZE - ICT_SIZE))
   temp = np.concatenate((X_testing_ict, pad), axis=1)
-  X_testing = np.concatenate((temp, X_testing_fct))
+  X_testing = np.concatenate((temp, X_testing_fct), axis=1)
   X_testing = X_testing.reshape(TESTING_SIZE, 2, FCT_SIZE)
 
   model=Sequential()
-  model.add(SimpleRNN(32, input_shape=(2, FCT_SIZE), activation='relu', return_sequences=False, stateful=False, dropout=0.2, use_bias=True))
+  model.add(SimpleRNN(64, input_shape=(2, FCT_SIZE), activation='relu', return_sequences=False, stateful=False, dropout=0.2))
   # model.add(Dense(16))
   model.add(Dense(1, name='main_output', activation='sigmoid'))
   model.compile(optimizer='rmsprop', loss='mse', metrics=['accuracy'])
@@ -135,15 +138,16 @@ def simple_rnn():
   return model, history
 
 def dense_rnn():
+  print('\n*** DENSE RNN ***\n')
   DENSE_SIZE=15
   ict = Input(shape=(ICT_SIZE,), name='ict')
-  d1 = Dense(DENSE_SIZE, activation='relu')(ict)
+  d1 = Dense(DENSE_SIZE, activation='relu', kernel_regularizer=regularizers.l2(0.0), activity_regularizer=regularizers.l2(0.0))(ict)
   fct = Input(shape=(FCT_SIZE,), name='fct')
-  d2 = Dense(DENSE_SIZE, activation='relu')(fct)
+  d2 = Dense(DENSE_SIZE, activation='relu', kernel_regularizer=regularizers.l2(0.0), activity_regularizer=regularizers.l2(0.0))(fct)
 
   x = concatenate([d1, d2])
   x = Reshape((2, DENSE_SIZE), input_shape=(1, DENSE_SIZE*2))(x)
-  x = SimpleRNN(32, input_shape=(None, 2, DENSE_SIZE), return_sequences=False, stateful=False, dropout=0.2)(x)
+  x = SimpleRNN(64, input_shape=(None, 2, DENSE_SIZE), return_sequences=False, stateful=False, dropout=0.2)(x)
   output = Dense(1, name='main_output', activation='sigmoid')(x)
 
   model = Model(input=[ict, fct], output=output)
@@ -169,6 +173,7 @@ def dense_rnn():
   return model, history
 
 def cnn_rnn_15_153():
+  print('\n*** CNN RNN 15+153 ***\n')
   CONV_SIZE=6
   KERNEL_SIZE=3
   PADDING_SIZE=4
@@ -240,9 +245,10 @@ def cnn_rnn_15_153():
   # t = time.time() - t1
   # result = predict_result(output, y_testing)
   # print('predict={0}, predict time={1:.2f}'.format(result, t))
-  # return model, history
+  return model, history
 
 def cnn_rnn_15_90():
+  print('\n*** CNN RNN 15+90 ***\n')
   CONV_SIZE=6
   KERNEL_SIZE=3
   PADDING_SIZE=6
@@ -254,44 +260,45 @@ def cnn_rnn_15_90():
   ict_test_padding = np.concatenate((X_testing_ict, pad), axis=1)  
 
   ict = Input(shape=(ICT_PADDING_SIZE,), name='ict')
-  # (1, 21)
+  # ex: CONV_SIZE=2, KERNEL_SIZE=3
+  # ex: (1, 21)
   ict_reshape = Reshape((ICT_PADDING_SIZE, 1), input_shape=(None, 1, ICT_PADDING_SIZE))(ict)
-  # (21, 1)
+  # ex: (21, 1)
   # ict max_length=ICT_SIZE, input_dim=1
   c1 = Conv1D(CONV_SIZE, KERNEL_SIZE, activation='relu', input_shape=(ICT_PADDING_SIZE, 1))(ict_reshape)
-  # (19, 2)
-  c1 = Reshape((1, (ICT_PADDING_SIZE-KERNEL_SIZE+1)*CONV_SIZE), input_shape=(ICT_PADDING_SIZE-KERNEL_SIZE+1, CONV_SIZE))(c1)
-  # (1, 38)
+  # ex: (19, 2)
+  c1_reshape = Reshape((1, (ICT_PADDING_SIZE-KERNEL_SIZE+1)*CONV_SIZE), input_shape=(ICT_PADDING_SIZE-KERNEL_SIZE+1, CONV_SIZE))(c1)
+  # ex: (1, 38)
 
   fct = Input(shape=(FCT_SIZE,), name='fct')
-  # (1, 90)
+  # ex: (1, 90)
   fct_reshape = Reshape((FCT_SIZE, 1), input_shape=(None, 1, FCT_SIZE))(fct)
-  # (90, 1)
+  # ex: (90, 1)
   input_shape = (FCT_SIZE, 1)
   c2 = Conv1D(CONV_SIZE, KERNEL_SIZE, activation='relu', input_shape=input_shape)(fct_reshape)
-  # (88, 2)
-  c2 = MaxPooling1D(pool_size=2)(c2)
-  # (44, 2)
+  # ex: (88, 2)
+  c2_pooling = MaxPooling1D(pool_size=2)(c2)
+  # ex:(44, 2)
   input_shape = (math.floor((input_shape[0]-KERNEL_SIZE+1)/2), CONV_SIZE)
-  c2 = Conv1D(CONV_SIZE, KERNEL_SIZE, activation='relu', input_shape=input_shape)(c2)
-  # (42, 2)
-  c2 = MaxPooling1D(pool_size=2)(c2)
-  # (21, 2)
+  c3 = Conv1D(CONV_SIZE, KERNEL_SIZE, activation='relu', input_shape=input_shape)(c2_pooling)
+  # ex:(42, 2)
+  c3_pooling = MaxPooling1D(pool_size=2)(c3)
+  # ex: (21, 2)
   input_shape = (math.floor((input_shape[0]-KERNEL_SIZE+1)/2), CONV_SIZE)
-  c2 = Conv1D(CONV_SIZE, KERNEL_SIZE, activation='relu', input_shape=input_shape)(c2)
-  # (19, 2)
+  c4 = Conv1D(CONV_SIZE, KERNEL_SIZE, activation='relu', input_shape=input_shape)(c3_pooling)
+  # ex: (19, 2)
 
   input_shape = (input_shape[0]-KERNEL_SIZE+1, CONV_SIZE)
-  c2 = Reshape((1, input_shape[0]*CONV_SIZE), input_shape=input_shape)(c2)
-  # (1, 38)
+  c4_reshape = Reshape((1, input_shape[0]*CONV_SIZE), input_shape=input_shape)(c4)
+  # ex: (1, 38)
  
-  x = concatenate([c1, c2])
-  # (1, 76)
+  x = concatenate([c1_reshape, c4_reshape])
+  # ex: (1, 76)
   RNN_UNIT_SIZE=int(input_shape[0]*CONV_SIZE)
-  x = Reshape((2, RNN_UNIT_SIZE), input_shape=(1, RNN_UNIT_SIZE*2))(x)
+  x_reshape = Reshape((2, RNN_UNIT_SIZE), input_shape=(1, RNN_UNIT_SIZE*2))(x)
 
-  x = SimpleRNN(32, input_shape=(None, 2, RNN_UNIT_SIZE), return_sequences=False, stateful=False, dropout=0.2)(x)
-  output = Dense(1, name='main_output', activation='sigmoid')(x)
+  rnn = SimpleRNN(64, input_shape=(None, 2, RNN_UNIT_SIZE), return_sequences=False, stateful=False, dropout=0.1)(x_reshape)
+  output = Dense(1, name='main_output', activation='sigmoid')(rnn)
 
   model = Model(input=[ict, fct], output=output)
 
@@ -313,7 +320,7 @@ def cnn_rnn_15_90():
   # t = time.time() - t1
   # result = predict_result(output, y_testing)
   # print('predict={0}, predict time={1:.2f}'.format(result, t))
-  # return model, history
+  return model, history
 
 def plot(history):
   import matplotlib.pyplot as plt
@@ -340,8 +347,8 @@ import time
 
 
 # model, history = dnn()
-model, history = simple_rnn()
-# model, history = dense_rnn()
+# model, history = simple_rnn()
+model, history = dense_rnn()
 # model, history = cnn_rnn_15_153()
 # model, history = cnn_rnn_15_90()
 
